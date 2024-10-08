@@ -131,43 +131,63 @@ class FileChecker(QWidget):
 
     def read_excel_file(self, file_path):
         filenames = []
-        coordinates = []  # Store coordinates as well
+        coordinates = []
         global subjectkeywords
-        subjectkeywords = set()  # Initialize here
+        subjectkeywords = set()
 
         workbook = openpyxl.load_workbook(file_path)
         worksheet = workbook.active
-        for row in worksheet.iter_rows(values_only=True):
-            if row[0] and not str(row[0]).lower() in ["filename", "filename"]:
+
+        # Find the headers for Latitude, Longitude, Easting, Northing
+        header_row = next(worksheet.iter_rows(values_only=True))
+        headers = {cell: idx for idx, cell in enumerate(header_row)}  # No need for .value
+
+        lat_idx = headers.get("Latitude (LL)", None)
+        lon_idx = headers.get("Longitude (LL)", None)
+        easting_idx = headers.get("Easting (OSGB)", None)
+        northing_idx = headers.get("Northing (OSGB)", None)
+
+        if lat_idx is None or lon_idx is None:
+            print("Latitude and Longitude columns not found, trying Easting/Northing.")
+
+        for row in worksheet.iter_rows(min_row=2, values_only=True):  # Skip header row
+            if row[0]:
                 filenames.append(row[0].strip().lower())
-            
-            # Check for keywords and add them
-            for index in range(2, 5):  # Assuming keywords are in columns 3, 4, and 5 (index 2, 3, 4)
-                if row[index] and isinstance(row[index], str):  # Check if it's a string
+
+            # Extract subject keywords (example: columns 3, 4, 5, adjust as necessary)
+            for index in range(2, 5):
+                if row[index] and isinstance(row[index], str):
                     subjectkeywords.add(row[index].strip().lower())
 
             try:
-                # Check if lat/lon (rows 17/18) are provided, use them if available
-                if row[17] is not None and row[18] is not None:  # Adjust index for lat/lon (17/18 correspond to indices 16/17)
-                    latitude = float(row[18])
-                    longitude = float(row[17])
+                # Check for Latitude/Longitude first
+                if lat_idx is not None and lon_idx is not None and row[lat_idx] is not None and row[lon_idx] is not None:
+                    latitude = float(row[lat_idx])
+                    longitude = float(row[lon_idx])
                     print(f"Lat/Lon for {row[0]}: Latitude={latitude}, Longitude={longitude}")
                     coordinates.append((latitude, longitude))
-                elif row[19] is not None and row[20] is not None:  # Fall back to OSGB if lat/lon are missing
-                    osgb_easting = float(row[19])  # Adjust index for easting
-                    osgb_northing = float(row[20])  # Adjust index for northing
+
+                # Fall back to Easting/Northing if Latitude/Longitude is not available
+                elif easting_idx is not None and northing_idx is not None and row[easting_idx] is not None and row[northing_idx] is not None:
+                    osgb_easting = float(row[easting_idx])
+                    osgb_northing = float(row[northing_idx])
                     print(f"OSGB Coordinates for {row[0]}: Easting={osgb_easting}, Northing={osgb_northing}")
-                    
+
                     # Convert to Latitude/Longitude
                     longitude, latitude = transformer.transform(osgb_easting, osgb_northing)
                     print(f"Converted Coordinates for {row[0]}: Latitude={latitude}, Longitude={longitude}")
-                    coordinates.append((latitude, longitude))  # Append in (latitude, longitude) order
+                    coordinates.append((latitude, longitude))
+
                 else:
-                    coordinates.append((None, None))  # Append None for missing coordinates
+                    coordinates.append((None, None))
+
             except (ValueError, IndexError) as e:
                 print(f"Invalid coordinates for {row[0]}: {e}")
-                coordinates.append((None, None))  # Append None for invalid data
+                coordinates.append((None, None))
+
         return filenames, coordinates
+
+
 
 
        
