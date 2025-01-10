@@ -1,170 +1,76 @@
 import os
-import sys
-import openpyxl
-from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout, QFileDialog, QListWidget, QMessageBox, QGridLayout
+import streamlit as st
 
-class FileChecker(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.initUI()
 
-    def initUI(self):
-        self.setWindowTitle('File Checker')
-        self.setGeometry(100, 100, 800, 600)
-        
-        # Directory selection
-        self.directory_label = QLabel('Select Directory:', self)
-        self.directory_path = QLineEdit(self)
-        self.browse_directory_button = QPushButton('Browse', self)
-        self.browse_directory_button.clicked.connect(self.browse_directory)
+# Set page configuration with favicon
+st.set_page_config(
+    page_title="Check Files Against Metadata",
+    page_icon="C:\\python scripts\\raster_metadata_checker\\icon2.ico"
+)
 
-        # Excel file selection
-        self.excel_label = QLabel('Select Excel File:', self)
-        self.excel_file_path = QLineEdit(self)
-        self.browse_excel_button = QPushButton('Browse', self)
-        self.browse_excel_button.clicked.connect(self.browse_excel_file)
+# Display logo at the top of the page
+st.image("C:\\python scripts\\raster_metadata_checker\\icon2.ico", caption="Check Files Against Metadata", width=200)
 
-        # Second Excel file selection
-        self.excel_label2 = QLabel('Select Second Excel File:', self)
-        self.excel_file_path2 = QLineEdit(self)
-        self.browse_excel_button2 = QPushButton('Browse', self)
-        self.browse_excel_button2.clicked.connect(self.browse_excel_file2)
+# Your main app content
+st.title("Check Files Against Metadata")
+st.write(" upload images and Excel files to compare metadata.")
 
-        # Check files button
-        self.check_button = QPushButton('Check Files', self)
-        self.check_button.clicked.connect(self.check_files)
 
-        # Listboxes for missing files and keywords
-        self.missing_directory_label = QLabel('Missing from directory:', self)
-        self.missing_directory_listbox = QListWidget(self)
-        
-        self.missing_metadata_label = QLabel('Not listed in metadata:', self)
-        self.missing_metadata_listbox = QListWidget(self)
-        
-        self.keyword_label = QLabel('Subject Keywords:', self)
-        self.keyword_listbox = QListWidget(self)
+# Function to process Excel files and extract filenames and keywords
+def read_excel_file(file):
+    filenames = []
+    subjectkeywords = set()
+    excluded_keywords = {"subject keyword 1", "subject keyword 2", "subject keyword 3"}  # Titles to exclude
+    workbook = openpyxl.load_workbook(file)
+    worksheet = workbook.active
+    for row in worksheet.iter_rows(values_only=True):
+        if row[0] and not str(row[0]).lower() in ["filename"]:
+            filenames.append(row[0].strip().lower())
+        # Check and add keywords only if they are not in the excluded list
+        for keyword in row[2:5]:  # Assuming columns C, D, and E contain keywords
+            if keyword and keyword.strip().lower() not in excluded_keywords:
+                subjectkeywords.add(keyword.strip().lower())
+    return filenames, subjectkeywords
 
-        # Status label
-        self.status_label = QLabel('', self)
 
-        # Layouts
-        main_layout = QVBoxLayout()
+# Function to compare uploaded files against Excel data
+def find_missing_files(uploaded_files, excel_filenames):
+    uploaded_filenames = [os.path.basename(file.name).lower() for file in uploaded_files]
+    missing_in_directory = [filename for filename in excel_filenames if filename not in uploaded_filenames]
+    missing_in_metadata = [filename for filename in uploaded_filenames if filename not in excel_filenames]
+    return missing_in_directory, missing_in_metadata
 
-        directory_layout = QHBoxLayout()
-        directory_layout.addWidget(self.directory_label)
-        directory_layout.addWidget(self.directory_path)
-        directory_layout.addWidget(self.browse_directory_button)
-        main_layout.addLayout(directory_layout)
 
-        excel_layout = QHBoxLayout()
-        excel_layout.addWidget(self.excel_label)
-        excel_layout.addWidget(self.excel_file_path)
-        excel_layout.addWidget(self.browse_excel_button)
-        main_layout.addLayout(excel_layout)
 
-        excel_layout2 = QHBoxLayout()
-        excel_layout2.addWidget(self.excel_label2)
-        excel_layout2.addWidget(self.excel_file_path2)
-        excel_layout2.addWidget(self.browse_excel_button2)
-        main_layout.addLayout(excel_layout2)
+# File upload section
+uploaded_files = st.file_uploader("Upload image files (multiple allowed)", type=["jpg", "jpeg", "png", "gif", "bmp", "tiff"], accept_multiple_files=True)
 
-        main_layout.addWidget(self.check_button)
+# Excel file upload section
+uploaded_excel_file1 = st.file_uploader("Upload first Excel file", type=["xlsx"])
+uploaded_excel_file2 = st.file_uploader("Upload second Excel file (optional)", type=["xlsx"])
 
-        listbox_layout = QGridLayout()
-        listbox_layout.addWidget(self.missing_directory_label, 0, 0)
-        listbox_layout.addWidget(self.missing_directory_listbox, 1, 0)
-        listbox_layout.addWidget(self.missing_metadata_label, 0, 1)
-        listbox_layout.addWidget(self.missing_metadata_listbox, 1, 1)
-        listbox_layout.addWidget(self.keyword_label, 0, 2)
-        listbox_layout.addWidget(self.keyword_listbox, 1, 2)
-        main_layout.addLayout(listbox_layout)
-
-        main_layout.addWidget(self.status_label)
-
-        self.setLayout(main_layout)
-
-    def browse_directory(self):
-        directory = QFileDialog.getExistingDirectory(self, 'Select Directory')
-        if directory:
-            self.directory_path.setText(directory)
-
-    def browse_excel_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, 'Select Excel File', '', 'Excel files (*.xlsx *.xls)')
-        if file_path:
-            self.excel_file_path.setText(file_path)
-
-    def browse_excel_file2(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, 'Select Second Excel File', '', 'Excel files (*.xlsx *.xls)')
-        if file_path:
-            self.excel_file_path2.setText(file_path)
-
-    def read_excel_file(self, file_path):
-        filenames = []
-        workbook = openpyxl.load_workbook(file_path)
-        worksheet = workbook.active
-        for row in worksheet.iter_rows(values_only=True):
-            if row[0] and not str(row[0]).lower() in ["Filename", "filename"]:
-                filenames.append(row[0].strip().lower())
-            if row[2] and not str(row[2]).lower() in ["Subject Keyword 1", "subjectword"]:
-                subjectkeywords.add(row[2].strip().lower())
-            if row[3] and not str(row[3]).lower() in ["Subject Keyword 2", "subjectword"]:
-                subjectkeywords.add(row[3].strip().lower())
-            if row[4] and not str(row[4]).lower() in ["Subject Keyword 3", "subjectword"]:
-                subjectkeywords.add(row[4].strip().lower())
-        return filenames
-
-    def list_files(self, directory):
-        image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif']
-        return [filename.lower() for filename in os.listdir(directory) if os.path.isfile(os.path.join(directory, filename)) and os.path.splitext(filename)[1].lower() in image_extensions]
-
-    def find_missing_files(self, directory_files, excel_filenames):
-        missing_in_directory = [filename for filename in excel_filenames if filename not in directory_files]
-        missing_in_metadata = [filename for filename in directory_files if filename not in excel_filenames]
-        return missing_in_directory, missing_in_metadata
-
-    def check_files(self):
-        directory = self.directory_path.text()
-        excel_file1 = self.excel_file_path.text()
-        excel_file2 = self.excel_file_path2.text()
-
-        if not directory or not excel_file1:
-            QMessageBox.warning(self, 'Error', 'Please select a directory and at least one Excel file.')
-            return
-
-        global subjectkeywords
-        subjectkeywords = set()
-
-        excel_filenames1 = self.read_excel_file(excel_file1)
-        excel_filenames2 = self.read_excel_file(excel_file2) if excel_file2 else []
-        excel_filenames = list(set(excel_filenames1 + excel_filenames2))
-
-        directory_files = self.list_files(directory)
-
-        missing_in_directory, missing_in_metadata = self.find_missing_files(directory_files, excel_filenames)
-
-        self.missing_directory_listbox.clear()
-        self.missing_metadata_listbox.clear()
-        self.keyword_listbox.clear()
-
-        keyword_remove_list = ['subject keyword 3', 'subject keyword 2', 'subject keyword 1']
-
-        for file in missing_in_directory:
-            self.missing_directory_listbox.addItem(file)
-        for file in missing_in_metadata:
-            self.missing_metadata_listbox.addItem(file)
-        for keyword in subjectkeywords:
-            if keyword not in keyword_remove_list:
-                self.keyword_listbox.addItem(keyword)
-
-        if not missing_in_directory and not missing_in_metadata:
-            self.status_label.setText("No missing files found! All good!")
-            self.status_label.setStyleSheet("color: green;")
+if st.button("Check Files"):
+    if uploaded_files and uploaded_excel_file1:
+        # Read filenames from Excel files
+        excel_filenames1, subjectkeywords1 = read_excel_file(uploaded_excel_file1)
+        if uploaded_excel_file2:
+            excel_filenames2, subjectkeywords2 = read_excel_file(uploaded_excel_file2)
+            excel_filenames = list(set(excel_filenames1 + excel_filenames2))
+            subjectkeywords = subjectkeywords1.union(subjectkeywords2)
         else:
-            self.status_label.setText("Missing files detected. Check the lists above.")
-            self.status_label.setStyleSheet("color: red;")
+            excel_filenames = excel_filenames1
+            subjectkeywords = subjectkeywords1
 
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    ex = FileChecker()
-    ex.show()
-    sys.exit(app.exec_())
+        # Compare uploaded files against Excel filenames
+        missing_in_directory, missing_in_metadata = find_missing_files(uploaded_files, excel_filenames)
+
+        # Display results
+        st.subheader("Results")
+        st.write("**Missing from directory:**")
+        st.write(missing_in_directory if missing_in_directory else "No files missing.")
+        st.write("**Not listed in metadata:**")
+        st.write(missing_in_metadata if missing_in_metadata else "No extra files found.")
+        st.write("**Subject Keywords:**")
+        st.write(list(subjectkeywords))
+    else:
+        st.error("Please upload at least one Excel file and some image files.")
