@@ -5,11 +5,9 @@ import streamlit as st
 # Set page configuration with favicon
 st.set_page_config(
     page_title="Check Files Against Metadata",
-    page_icon="C:\\python scripts\\raster_metadata_checker\\icon2.ico"
+   
 )
 
-# Display logo at the top of the page
-st.image("C:\\python scripts\\raster_metadata_checker\\icon2.ico", caption="Check Files Against Metadata", width=200)
 
 # Your main app content
 st.title("Check Files Against Metadata")
